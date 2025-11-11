@@ -1,18 +1,30 @@
-const ipRequests = new Map();
-const LIMIT = 60;
-const WINDOW = 60_000;
+const RATE_LIMIT_MAX = 60; 
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
-export function rateLimiter(req, res, next) {
-  const ip = req.ip;
+const ipBuckets = new Map();
+
+function rateLimiter(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress || "unknown";
   const now = Date.now();
-  const data = ipRequests.get(ip) || { count: 0, start: now };
-  if (now - data.start > WINDOW) {
-    data.count = 0;
-    data.start = now;
+
+  const entry = ipBuckets.get(ip) || { count: 0, windowStart: now };
+
+  if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    entry.count = 0;
+    entry.windowStart = now;
   }
-  data.count++;
-  ipRequests.set(ip, data);
-  if (data.count > LIMIT)
-    return res.status(429).json({ error: 'Too many requests' });
+
+  entry.count++;
+  ipBuckets.set(ip, entry);
+
+  if (entry.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({
+      error: "Too Many Requests",
+      details: `Rate limit: ${RATE_LIMIT_MAX}/${RATE_LIMIT_WINDOW_MS / 1000}s`,
+    });
+  }
+
   next();
 }
+
+module.exports = { rateLimiter };

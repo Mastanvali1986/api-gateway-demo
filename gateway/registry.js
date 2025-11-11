@@ -1,30 +1,50 @@
 const services = new Map();
 const rrIndex = new Map();
 
-export function registerService({ name, route, target, healthCheckUrl }) {
-  if (!route || !target) return { error: 'route and target required' };
+function upsertService(route, svc) {
   if (!services.has(route)) services.set(route, []);
   const arr = services.get(route);
-  const exists = arr.find(s => s.target === target);
-  if (!exists) arr.push({ name, target, healthCheckUrl, isHealthy: true });
-  return { ok: true, route, target };
+  const existing = arr.find(x => x.target === svc.target);
+
+  if (existing) Object.assign(existing, svc);
+  else arr.push({ ...svc, isHealthy: true, lastChecked: 0 });
 }
 
-export function deregisterService({ route, target }) {
-  if (!services.has(route)) return { error: 'not found' };
+function deregisterService(route, target) {
+  if (!services.has(route)) return;
   const arr = services.get(route).filter(s => s.target !== target);
-  arr.length ? services.set(route, arr) : services.delete(route);
-  return { ok: true };
+
+  if (arr.length) services.set(route, arr);
+  else services.delete(route);
+  rrIndex.delete(route);
 }
 
-export function getServices() {
-  return services;
-}
-
-export function pickInstance(route) {
+function pickHealthyInstance(route) {
   const arr = (services.get(route) || []).filter(s => s.isHealthy);
   if (!arr.length) return null;
-  const i = rrIndex.get(route) || 0;
-  rrIndex.set(route, (i + 1) % arr.length);
+
+  const i = (rrIndex.get(route) || 0) % arr.length;
+  rrIndex.set(route, i + 1);
   return arr[i];
 }
+
+function listServices() {
+  const out = {};
+  for (const [route, arr] of services.entries()) {
+    out[route] = arr.map(s => ({
+      name: s.name,
+      target: s.target,
+      isHealthy: s.isHealthy,
+      lastChecked: s.lastChecked,
+    }));
+  }
+  return out;
+}
+
+module.exports = {
+  services,
+  upsertService,
+  deregisterService,
+  pickHealthyInstance,
+  listServices,
+};

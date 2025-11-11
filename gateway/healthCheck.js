@@ -1,24 +1,33 @@
-import fetch from 'node-fetch';
-import { getServices } from './registry.js';
+const { services } = require("./registry");
 
-async function ping(url) {
+async function ping(url, timeoutMs = 2000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const res = await fetch(url, { timeout: 2000 });
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
     return res.ok;
   } catch {
+    clearTimeout(id);
     return false;
   }
 }
 
-export async function runHealthCheck() {
-  const registry = getServices();
-  for (const arr of registry.values()) {
-    for (const s of arr) {
-      s.isHealthy = s.healthCheckUrl ? await ping(s.healthCheckUrl) : true;
+async function runHealthCheck() {
+  const checks = [];
+
+  for (const arr of services.values()) {
+    for (const svc of arr) {
+      checks.push(
+        ping(svc.healthCheckUrl || svc.target)
+          .then(ok => Object.assign(svc, { isHealthy: ok, lastChecked: Date.now() }))
+      );
     }
   }
+  await Promise.all(checks);
 }
 
-export function startHealthCheck() {
-  setInterval(runHealthCheck, 10_000).unref();
-}
+module.exports = {
+  runHealthCheck,
+};

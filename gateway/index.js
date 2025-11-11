@@ -1,70 +1,82 @@
-import express from 'express';
-import bodyParser from 'body-parser';
-import httpProxy from 'http-proxy';
-import { registerService, deregisterService, getServices, pickInstance } from './registry.js';
-import { rateLimiter } from './rateLimiter.js';
-import { jwtAuth, issueToken } from './auth.js';
-import { runHealthCheck, startHealthCheck } from './healthCheck.js';
+const express = require("express");
+const bodyParser = require("body-parser");
+const httpProxy = require("http-proxy");
+
+const { jwtAuth, login } = require("./auth");
+const { rateLimiter } = require("./rateLimiter");
+const { upsertService, deregisterService, pickHealthyInstance, listServices } = require("./registry");
+const { runHealthCheck } = require("./healthCheck");
+
+const PORT = process.env.PORT || 8080;
+const HEALTH_INTERVAL_MS = 10_000;
 
 const app = express();
-const proxy = httpProxy.createProxyServer({});
 app.use(bodyParser.json());
 app.use(rateLimiter);
 
-const PORT = process.env.PORT || 8080;
-const JWT_SECRET = process.env.JWT_SECRET || 'secret123';
+// LOGIN
+app.post("/auth/login", login);
 
-// --- Auth ---
-app.post('/auth/login', (req, res) => {
-  const { userId = 'demo', role = 'user' } = req.body;
-  const token = issueToken(userId, role, JWT_SECRET);
-  res.json({ token });
+// REGISTER SERVICES
+app.post("/register", (req, res) => {
+  const { name, route, target, healthCheckUrl } = req.body || {};
+  if (!name || !route || !target)
+    return res.status(400).json({ error: "name, route, target are required" });
+
+  upsertService(route, { name, route, target, healthCheckUrl });
+  res.json({ ok: true, services: listServices() });
 });
 
-// --- Registry APIs ---
-app.post('/register', (req, res) => {
-  const result = registerService(req.body);
-  res.json(result);
+app.delete("/register", (req, res) => {
+  const { route, target } = req.body || {};
+  if (!route || !target)
+    return res.status(400).json({ error: "route, target required" });
+
+  deregisterService(route, target);
+  res.json({ ok: true, services: listServices() });
 });
-app.delete('/register', (req, res) => {
-  const result = deregisterService(req.body);
-  res.json(result);
+
+// ADMIN
+app.get("/admin/services", (req, res) => {
+  res.json({ services: listServices() });
 });
-app.get('/admin/services', (req, res) => res.json(getServices()));
-app.post('/admin/healthcheck', async (req, res) => {
+
+app.post("/admin/healthcheck", async (req, res) => {
   await runHealthCheck();
-  res.json(getServices());
+  res.json({ ok: true, services: listServices() });
 });
 
-// --- Proxy Logic ---
-const protectedRoutes = ['/secure'];
-proxy.on('error', (err, req, res) => {
-  res.status(502).json({ error: err.message });
+setInterval(runHealthCheck, HEALTH_INTERVAL_MS).unref();
+
+// PROXY
+const proxy = httpProxy.createProxyServer({});
+
+proxy.on("error", (err, req, res) => {
+  if (!res.headersSent)
+    res.status(502).json({ error: "Bad Gateway", details: err.message });
 });
 
 app.use(async (req, res, next) => {
-  const prefix = Array.from(getServices().keys()).find(p => req.path.startsWith(p));
+  const prefixes = Array.from(listServices() ? Object.keys(listServices()) : [])
+    .sort((a, b) => b.length - a.length);
+
+  const prefix = prefixes.find(p => req.path.startsWith(p));
   if (!prefix) return next();
 
-  if (protectedRoutes.some(p => prefix.startsWith(p))) {
-    const middleware = jwtAuth(JWT_SECRET);
-    let done = false;
-    await new Promise(resolve => middleware(req, res, () => { done = true; resolve(); }));
-    if (!done) return;
-  }
+  const targetSvc = pickHealthyInstance(prefix);
+  if (!targetSvc)
+    return res.status(503).json({ error: "No healthy instance" });
 
-  const instance = pickInstance(prefix);
-  if (!instance) return res.status(503).json({ error: 'No healthy service' });
+  const upstreamPath = req.originalUrl.replace(prefix, "") || "/";
+  const forwardUrl = targetSvc.target + upstreamPath;
 
-  const forwardUrl = instance.target + req.originalUrl.replace(prefix, '');
-  req.headers['x-forwarded-for'] = req.ip;
   proxy.web(req, res, { target: forwardUrl, changeOrigin: true });
 });
 
-app.use((req, res) => res.status(404).json({ error: 'Not Found' }));
-
-app.listen(PORT, () => {
-  console.log(`Gateway running at http://localhost:${PORT}`);
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
 });
 
-startHealthCheck();
+app.listen(PORT, () =>
+  console.log(`Gateway running http://localhost:${PORT}`)
+);

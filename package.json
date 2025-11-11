@@ -1,7 +1,6 @@
 {
   "name": "wpr_asmnt2",
   "version": "1.0.0",
-  "type": "module",
   "main": "gateway/index.js",
   "scripts": {
     "start": "node gateway/index.js",

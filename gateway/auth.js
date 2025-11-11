@@ -1,15 +1,34 @@
-import jwt from 'jsonwebtoken';
+const jwt = require("jsonwebtoken");
 
-export const issueToken = (userId, role, secret) =>
-  jwt.sign({ sub: userId, role }, secret, { expiresIn: '1h' });
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-demo-key";
 
-export const jwtAuth = secret => (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token' });
-  try {
-    req.user = jwt.verify(token, secret);
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-  }
+function jwtAuth(required = true) {
+  return (req, res, next) => {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+    if (!token) {
+      return required
+        ? res.status(401).json({ error: "Missing Bearer JWT token" })
+        : next();
+    }
+    try {
+      const payload = jwt.verify(token, JWT_SECRET);
+      req.user = payload;
+      next();
+    } catch {
+      res.status(401).json({ error: "Invalid token" });
+    }
+  };
+}
+
+function login(req, res) {
+  const { userId = "demo-user", role = "user" } = req.body || {};
+  const token = jwt.sign({ sub: userId, role }, JWT_SECRET, { expiresIn: "1h" });
+  res.json({ token });
+}
+
+module.exports = {
+  jwtAuth,
+  login,
 };
