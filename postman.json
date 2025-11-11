@@ -1,0 +1,111 @@
+{
+  "info": {
+    "name": "API Gateway",
+    "_postman_id": "3d13c9a9-231f-42ce-aad2-aa",
+    "description": "API Gateway demo with service discovery, proxy, JWT, rate limit, health checks",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Register Users Service",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "http://localhost:8080/register",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["register"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"users\",\n  \"route\": \"/users\",\n  \"target\": \"http://localhost:5001\",\n  \"healthCheckUrl\": \"http://localhost:5001/health\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Register Orders Service",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "http://localhost:8080/register",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["register"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"orders\",\n  \"route\": \"/orders\",\n  \"target\": \"http://localhost:5002\",\n  \"healthCheckUrl\": \"http://localhost:5002/health\"\n}"
+        }
+      }
+    },
+    {
+      "name": "List Services",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/admin/services"
+      }
+    },
+    {
+      "name": "Manual Health Check",
+      "request": {
+        "method": "POST",
+        "url": "http://localhost:8080/admin/healthcheck"
+      }
+    },
+    {
+      "name": "Auth - Get JWT Token",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "http://localhost:8080/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"demoUser\",\n  \"role\": \"user\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Users - Proxy",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/users/"
+      }
+    },
+    {
+      "name": "Orders - Proxy",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/orders/"
+      }
+    },
+    {
+      "name": "Secure Users - Proxy (JWT)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "http://localhost:8080/secure/users/me"
+      }
+    },
+    {
+      "name": "Deregister Service",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "http://localhost:8080/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"route\": \"/users\",\n  \"target\": \"http://localhost:5001\"\n}"
+        }
+      }
+    }
+  ]
+}

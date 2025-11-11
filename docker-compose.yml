@@ -1,0 +1,26 @@
+version: "3.9"
+services:
+  gateway:
+    build: .
+    command: ["node", "gateway/index.js"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - users
+      - orders
+  users:
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./services/users:/app
+    command: ["node", "index.js"]
+    ports:
+      - "5001:5001"
+  orders:
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./services/orders:/app
+    command: ["node", "index.js"]
+    ports:
+      - "5002:5002"
