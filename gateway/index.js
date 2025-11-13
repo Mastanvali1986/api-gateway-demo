@@ -36,12 +36,15 @@ app.delete("/register", (req, res) => {
   res.json({ ok: true, services: listServices() });
 });
 
-// ADMIN
-app.get("/admin/services", (req, res) => {
+/**
+ * ADMIN services
+ *  jwtAuth(true) to authorise admin users
+ */
+app.get("/admin/services", jwtAuth(true), (req, res) => {
   res.json({ services: listServices() });
 });
 
-app.post("/admin/healthcheck", async (req, res) => {
+app.post("/admin/healthcheck",jwtAuth(true), async (req, res) => {
   await runHealthCheck();
   res.json({ ok: true, services: listServices() });
 });
